@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Background Remover</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <aside class="panel" aria-label="Image controls">
+        <div class="brand">
+          <div class="mark" aria-hidden="true">BR</div>
+          <div>
+            <h1>Background Remover</h1>
+            <p>Color-key removal with precise edge control.</p>
+          </div>
+        </div>
+
+        <label class="drop-zone" id="dropZone">
+          <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <span class="drop-icon" aria-hidden="true">+</span>
+          <span class="drop-title">Upload image</span>
+          <span class="drop-meta">PNG, JPG, WEBP, GIF - or paste with Ctrl/Cmd+V</span>
+        </label>
+
+        <section class="control-group" aria-labelledby="backgroundHeading">
+          <div class="section-head">
+            <h2 id="backgroundHeading">Background</h2>
+            <button class="ghost" id="autoDetectBtn" type="button">Auto detect</button>
+          </div>
+
+          <div class="color-row">
+            <label class="swatch-control">
+              <span>Color</span>
+              <input id="bgColorInput" type="color" value="#ffffff">
+            </label>
+            <button id="pickColorBtn" class="tool-button" type="button" aria-pressed="false">Pick pixel</button>
+          </div>
+
+          <label class="range-row">
+            <span>Tolerance</span>
+            <output id="toleranceValue">34</output>
+            <input id="toleranceInput" type="range" min="0" max="160" value="34">
+          </label>
+
+          <label class="range-row">
+            <span>Edge softness</span>
+            <output id="softnessValue">18</output>
+            <input id="softnessInput" type="range" min="0" max="80" value="18">
+          </label>
+
+          <label class="check-row">
+            <input id="edgeOnlyInput" type="checkbox">
+            <span>Only remove connected edge background</span>
+          </label>
+        </section>
+
+        <section class="control-group" aria-labelledby="outlineHeading">
+          <div class="section-head">
+            <h2 id="outlineHeading">Boundary</h2>
+            <label class="switch">
+              <input id="outlineEnabledInput" type="checkbox" checked>
+              <span></span>
+            </label>
+          </div>
+
+          <div class="color-row">
+            <label class="swatch-control">
+              <span>Color</span>
+              <input id="outlineColorInput" type="color" value="#ffffff">
+            </label>
+          </div>
+
+          <label class="range-row">
+            <span>Size</span>
+            <output id="outlineSizeValue">8</output>
+            <input id="outlineSizeInput" type="range" min="0" max="40" value="8">
+          </label>
+        </section>
+
+        <div class="actions">
+          <button id="downloadBtn" class="primary" type="button" disabled>Download PNG</button>
+          <button id="resetBtn" class="secondary" type="button" disabled>Reset</button>
+        </div>
+      </aside>
+
+      <section class="workspace" aria-label="Image workspace">
+        <div class="preview-toolbar">
+          <div class="tabs" role="tablist" aria-label="Preview mode">
+            <button id="resultTab" class="tab active" type="button" aria-selected="true">Result</button>
+            <button id="originalTab" class="tab" type="button" aria-selected="false">Original</button>
+          </div>
+          <div id="statusText" class="status">Waiting for image</div>
+        </div>
+
+        <div class="canvas-shell" id="canvasShell">
+          <canvas id="displayCanvas"></canvas>
+          <div class="empty-state" id="emptyState">
+            <div class="empty-frame"></div>
+            <h2>Drop or paste an image</h2>
+            <p>Then pick or detect a background color.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
