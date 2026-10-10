@@ -52,14 +52,15 @@ button:disabled {
 .app {
   display: grid;
   grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
 }
 
 .panel {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  min-height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
   padding: 24px;
   background: rgba(255, 255, 255, 0.88);
   border-right: 1px solid var(--line);
@@ -317,7 +318,13 @@ input[type="range"] {
 }
 
 .actions {
-  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  margin: auto -24px -24px;
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
 }
 
 .primary,
@@ -353,7 +360,7 @@ input[type="range"] {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
-  min-height: 100vh;
+  min-height: 0;
   padding: 24px;
 }
 
@@ -388,7 +395,12 @@ input[type="range"] {
   box-shadow: 0 3px 12px rgba(23, 32, 42, 0.12);
 }
 
+.preview-toolbar .tool-button {
+  flex: 0 0 auto;
+}
+
 .status {
+  margin-left: auto;
   overflow: hidden;
   max-width: min(42vw, 520px);
   color: var(--muted);
@@ -422,8 +434,13 @@ input[type="range"] {
   box-shadow: var(--shadow);
 }
 
-.canvas-shell.picking {
+.canvas-shell.picking,
+.canvas-shell.cropping {
   cursor: crosshair;
+}
+
+.canvas-shell.cropping canvas {
+  touch-action: none;
 }
 
 .canvas-shell.drag-over {
@@ -490,12 +507,27 @@ canvas {
 }
 
 @media (max-width: 920px) {
+  body {
+    padding-bottom: 72px;
+  }
+
   .app {
     grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .actions {
+    position: fixed;
+    right: 0;
+    left: 0;
+    z-index: 10;
+    margin: 0;
+    padding: 12px 24px;
   }
 
   .panel {
-    min-height: auto;
+    overflow: visible;
+    backdrop-filter: none;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
@@ -516,8 +548,11 @@ canvas {
     align-items: flex-start;
   }
 
+  .actions {
+    padding: 12px 16px;
+  }
+
   .color-row,
-  .actions,
   .preview-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -540,6 +575,7 @@ canvas {
 
   .status {
     max-width: 100%;
+    margin-left: 0;
     white-space: normal;
   }
 }

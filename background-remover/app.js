@@ -21,6 +21,7 @@ const els = {
   resetBtn: document.getElementById("resetBtn"),
   resultTab: document.getElementById("resultTab"),
   originalTab: document.getElementById("originalTab"),
+  cropBtn: document.getElementById("cropBtn"),
 };
 
 const state = {
@@ -30,6 +31,9 @@ const state = {
   resultCanvas: document.createElement("canvas"),
   view: "result",
   isPicking: false,
+  isCropping: false,
+  cropStart: null,
+  cropRect: null,
   lastObjectPixels: 0,
 };
 
@@ -87,6 +91,21 @@ function setStatus(message) {
 function setButtonsEnabled(enabled) {
   els.downloadBtn.disabled = !enabled;
   els.resetBtn.disabled = !enabled;
+  els.cropBtn.disabled = !enabled;
+}
+
+function setPicking(on) {
+  state.isPicking = on;
+  els.pickColorBtn.setAttribute("aria-pressed", String(on));
+  els.canvasShell.classList.toggle("picking", on);
+}
+
+function setCropping(on) {
+  state.isCropping = on;
+  state.cropStart = null;
+  state.cropRect = null;
+  els.cropBtn.setAttribute("aria-pressed", String(on));
+  els.canvasShell.classList.toggle("cropping", on);
 }
 
 function setView(view) {
@@ -354,6 +373,7 @@ function loadImageFromFile(file) {
     URL.revokeObjectURL(imageUrl);
     state.image = image;
     state.imageName = file.name;
+    setCropping(false);
     drawOriginalImage(image);
 
     const detected = detectBackgroundColor();
@@ -391,9 +411,62 @@ function pickColor(event) {
   const { x, y } = getCanvasPoint(event);
   const pixel = originalCtx.getImageData(x, y, 1, 1).data;
   els.bgColorInput.value = rgbToHex({ r: pixel[0], g: pixel[1], b: pixel[2] });
-  state.isPicking = false;
-  els.pickColorBtn.setAttribute("aria-pressed", "false");
-  els.canvasShell.classList.remove("picking");
+  setPicking(false);
+  setView("result");
+  applyColorRemoval();
+}
+
+function drawCropSelection() {
+  drawDisplay();
+  const rect = state.cropRect;
+  if (!rect) return;
+
+  const { width, height } = els.displayCanvas;
+  const scale = width / els.displayCanvas.getBoundingClientRect().width;
+  displayCtx.fillStyle = "rgba(23, 32, 42, 0.55)";
+  displayCtx.fillRect(0, 0, width, height);
+  displayCtx.clearRect(rect.x, rect.y, rect.w, rect.h);
+  displayCtx.drawImage(state.originalCanvas, rect.x, rect.y, rect.w, rect.h, rect.x, rect.y, rect.w, rect.h);
+  displayCtx.lineWidth = 2 * scale;
+  displayCtx.strokeStyle = "#ffffff";
+  displayCtx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+}
+
+function startCrop(event) {
+  if (!state.isCropping) return;
+  els.displayCanvas.setPointerCapture(event.pointerId);
+  state.cropStart = getCanvasPoint(event);
+  state.cropRect = null;
+}
+
+function moveCrop(event) {
+  if (!state.cropStart) return;
+  const a = state.cropStart;
+  const b = getCanvasPoint(event);
+  state.cropRect = {
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    w: Math.abs(a.x - b.x) + 1,
+    h: Math.abs(a.y - b.y) + 1,
+  };
+  drawCropSelection();
+}
+
+function endCrop() {
+  if (!state.cropStart) return;
+  const rect = state.cropRect;
+  state.cropStart = null;
+  state.cropRect = null;
+  if (!rect || rect.w < 4 || rect.h < 4) {
+    drawDisplay();
+    return;
+  }
+
+  const cropped = originalCtx.getImageData(rect.x, rect.y, rect.w, rect.h);
+  state.originalCanvas.width = rect.w;
+  state.originalCanvas.height = rect.h;
+  originalCtx.putImageData(cropped, 0, 0);
+  setCropping(false);
   setView("result");
   applyColorRemoval();
 }
@@ -401,6 +474,8 @@ function pickColor(event) {
 function resetImage() {
   if (!state.image) return;
 
+  setCropping(false);
+  drawOriginalImage(state.image);
   const detected = detectBackgroundColor();
   if (detected) els.bgColorInput.value = rgbToHex(detected);
 
@@ -490,11 +565,17 @@ function wireEvents() {
   els.autoDetectBtn.addEventListener("click", autoDetect);
   els.pickColorBtn.addEventListener("click", () => {
     if (!state.originalCanvas.width) return;
-    state.isPicking = !state.isPicking;
-    els.pickColorBtn.setAttribute("aria-pressed", String(state.isPicking));
-    els.canvasShell.classList.toggle("picking", state.isPicking);
+    setCropping(false);
+    setPicking(!state.isPicking);
     setView("original");
     setStatus(state.isPicking ? "Pick a pixel from the image" : "Pixel picker off");
+  });
+  els.cropBtn.addEventListener("click", () => {
+    if (!state.originalCanvas.width) return;
+    setPicking(false);
+    setCropping(!state.isCropping);
+    setView(state.isCropping ? "original" : "result");
+    setStatus(state.isCropping ? "Drag a rectangle to crop" : "Crop off");
   });
 
   [
@@ -511,6 +592,10 @@ function wireEvents() {
   });
 
   els.displayCanvas.addEventListener("click", pickColor);
+  els.displayCanvas.addEventListener("pointerdown", startCrop);
+  els.displayCanvas.addEventListener("pointermove", moveCrop);
+  els.displayCanvas.addEventListener("pointerup", endCrop);
+  els.displayCanvas.addEventListener("pointercancel", endCrop);
   els.resultTab.addEventListener("click", () => setView("result"));
   els.originalTab.addEventListener("click", () => setView("original"));
   els.downloadBtn.addEventListener("click", downloadResult);
