@@ -320,6 +320,7 @@ function applyColorRemoval() {
     }
   }
 
+  defringe(imageData, removalMask, bgColor);
   const objectMask = buildObjectMask(imageData);
   const finalData = els.outlineEnabledInput.checked
     ? renderOutline(imageData, objectMask)
@@ -335,6 +336,48 @@ function applyColorRemoval() {
     : 0;
   setStatus(`${state.imageName || "Image"} - ${keptPercent}% retained`);
   drawDisplay();
+}
+
+// Anti-aliased edge pixels are a blend of subject and background. Unmix them (color-to-alpha)
+// so the background tint becomes transparency instead of a light/dark halo.
+function defringe(imageData, removalMask, bgColor) {
+  const { data, width, height } = imageData;
+  const bg = [bgColor.r, bgColor.g, bgColor.b];
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const pixel = y * width + x;
+      const index = pixel * 4;
+      if (data[index + 3] === 0) continue;
+
+      let nearRemoved = removalMask[pixel];
+      for (let dy = -1; dy <= 1 && !nearRemoved; dy += 1) {
+        for (let dx = -1; dx <= 1 && !nearRemoved; dx += 1) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && ny >= 0 && nx < width && ny < height) nearRemoved = removalMask[ny * width + nx];
+        }
+      }
+      if (!nearRemoved) continue;
+
+      let alpha = 0;
+      for (let c = 0; c < 3; c += 1) {
+        const v = data[index + c];
+        const b = bg[c];
+        const channelAlpha = v > b ? (v - b) / (255 - b) : v < b ? (b - v) / b : 0;
+        if (channelAlpha > alpha) alpha = channelAlpha;
+      }
+
+      if (alpha === 0) {
+        data[index + 3] = 0;
+        continue;
+      }
+      for (let c = 0; c < 3; c += 1) {
+        data[index + c] = clamp(Math.round((data[index + c] - bg[c]) / alpha + bg[c]), 0, 255);
+      }
+      data[index + 3] = Math.min(data[index + 3], Math.round(alpha * 255));
+    }
+  }
 }
 
 function renderOutline(imageData, objectMask) {
