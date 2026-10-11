@@ -22,6 +22,7 @@ const els = {
   resultTab: document.getElementById("resultTab"),
   originalTab: document.getElementById("originalTab"),
   cropBtn: document.getElementById("cropBtn"),
+  autoCropBtn: document.getElementById("autoCropBtn"),
 };
 
 const state = {
@@ -34,6 +35,8 @@ const state = {
   isCropping: false,
   cropStart: null,
   cropRect: null,
+  crop: null,
+  autoCrop: false,
   lastObjectPixels: 0,
 };
 
@@ -92,6 +95,12 @@ function setButtonsEnabled(enabled) {
   els.downloadBtn.disabled = !enabled;
   els.resetBtn.disabled = !enabled;
   els.cropBtn.disabled = !enabled;
+  els.autoCropBtn.disabled = !enabled;
+}
+
+function setAutoCrop(on) {
+  state.autoCrop = on;
+  els.autoCropBtn.setAttribute("aria-pressed", String(on));
 }
 
 function setPicking(on) {
@@ -133,11 +142,30 @@ function drawDisplay() {
   displayCtx.drawImage(source, 0, 0);
 }
 
+// Always redraws 1:1 from the decoded source image, so crops never resample or round-trip pixels.
 function drawOriginalImage(image) {
-  state.originalCanvas.width = image.naturalWidth;
-  state.originalCanvas.height = image.naturalHeight;
-  originalCtx.clearRect(0, 0, state.originalCanvas.width, state.originalCanvas.height);
-  originalCtx.drawImage(image, 0, 0);
+  const { x, y, w, h } = state.crop || { x: 0, y: 0, w: image.naturalWidth, h: image.naturalHeight };
+  state.originalCanvas.width = w;
+  state.originalCanvas.height = h;
+  originalCtx.drawImage(image, x, y, w, h, 0, 0, w, h);
+}
+
+function getOpaqueBounds({ data, width, height }) {
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (data[(y * width + x) * 4 + 3] === 0) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      maxY = y;
+    }
+  }
+  if (maxX < 0) return null;
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
 function quantizedKey(data, index) {
@@ -297,10 +325,10 @@ function applyColorRemoval() {
     ? renderOutline(imageData, objectMask)
     : imageData;
 
-  state.resultCanvas.width = width;
-  state.resultCanvas.height = height;
-  resultCtx.clearRect(0, 0, width, height);
-  resultCtx.putImageData(finalData, 0, 0);
+  const bounds = (state.autoCrop && getOpaqueBounds(finalData)) || { x: 0, y: 0, w: width, h: height };
+  state.resultCanvas.width = bounds.w;
+  state.resultCanvas.height = bounds.h;
+  resultCtx.putImageData(finalData, -bounds.x, -bounds.y);
 
   const keptPercent = width * height
     ? Math.round((state.lastObjectPixels / (width * height)) * 100)
@@ -374,6 +402,7 @@ function loadImageFromFile(file) {
     state.image = image;
     state.imageName = file.name;
     setCropping(false);
+    state.crop = null;
     drawOriginalImage(image);
 
     const detected = detectBackgroundColor();
@@ -462,10 +491,9 @@ function endCrop() {
     return;
   }
 
-  const cropped = originalCtx.getImageData(rect.x, rect.y, rect.w, rect.h);
-  state.originalCanvas.width = rect.w;
-  state.originalCanvas.height = rect.h;
-  originalCtx.putImageData(cropped, 0, 0);
+  const base = state.crop || { x: 0, y: 0 };
+  state.crop = { x: base.x + rect.x, y: base.y + rect.y, w: rect.w, h: rect.h };
+  drawOriginalImage(state.image);
   setCropping(false);
   setView("result");
   applyColorRemoval();
@@ -475,6 +503,8 @@ function resetImage() {
   if (!state.image) return;
 
   setCropping(false);
+  setAutoCrop(false);
+  state.crop = null;
   drawOriginalImage(state.image);
   const detected = detectBackgroundColor();
   if (detected) els.bgColorInput.value = rgbToHex(detected);
@@ -589,6 +619,12 @@ function wireEvents() {
   ].forEach((input) => {
     input.addEventListener("input", applyColorRemoval);
     input.addEventListener("change", applyColorRemoval);
+  });
+
+  els.autoCropBtn.addEventListener("click", () => {
+    setAutoCrop(!state.autoCrop);
+    setView("result");
+    applyColorRemoval();
   });
 
   els.displayCanvas.addEventListener("click", pickColor);
