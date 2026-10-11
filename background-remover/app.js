@@ -306,10 +306,11 @@ function applyColorRemoval() {
   const removalMask = els.edgeOnlyInput.checked
     ? getEdgeConnectedMask(matchMask, width, height)
     : matchMask;
+  const rimMask = getRimMask(removalMask, width, height, 2);
 
   for (let pixel = 0; pixel < width * height; pixel += 1) {
     const index = pixel * 4;
-    if (!removalMask[pixel]) continue;
+    if (!removalMask[pixel] || rimMask[pixel]) continue;
 
     const distance = colorDistance(imageData.data, index, bgColor);
     if (distance <= tolerance) {
@@ -338,6 +339,23 @@ function applyColorRemoval() {
   drawDisplay();
 }
 
+// Removed pixels within `radius` of a kept pixel are the subject's faint anti-aliasing rim.
+// Cutting them by tolerance stair-steps the edge, so they are left for defringe to unmix.
+function getRimMask(removalMask, width, height, radius) {
+  const rim = new Uint8Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (removalMask[y * width + x]) continue;
+      for (let ny = Math.max(0, y - radius); ny <= Math.min(height - 1, y + radius); ny += 1) {
+        for (let nx = Math.max(0, x - radius); nx <= Math.min(width - 1, x + radius); nx += 1) {
+          rim[ny * width + nx] = removalMask[ny * width + nx];
+        }
+      }
+    }
+  }
+  return rim;
+}
+
 // Anti-aliased edge pixels are a blend of subject and background. Unmix them (color-to-alpha)
 // so the background tint becomes transparency instead of a light/dark halo.
 function defringe(imageData, removalMask, bgColor) {
@@ -364,7 +382,10 @@ function defringe(imageData, removalMask, bgColor) {
       for (let c = 0; c < 3; c += 1) {
         const v = data[index + c];
         const b = bg[c];
-        const channelAlpha = v > b ? (v - b) / (255 - b) : v < b ? (b - v) / b : 0;
+        // Ignore +-2 levels of compression noise; near-white backgrounds would otherwise turn a
+        // 255 noise pixel next to a 254 background into a fully opaque white speck.
+        const delta = Math.abs(v - b) - 2;
+        const channelAlpha = delta <= 0 ? 0 : delta / (v > b ? 255 - b : b);
         if (channelAlpha > alpha) alpha = channelAlpha;
       }
 
